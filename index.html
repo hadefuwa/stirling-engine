@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Serial Port Communication</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Gridstack dependencies -->
+    <link href="https://cdn.jsdelivr.net/npm/gridstack@7.2.3/dist/gridstack.min.css" rel="stylesheet"/>
+    <script src="https://cdn.jsdelivr.net/npm/gridstack@7.2.3/dist/gridstack-all.js"></script>
+    
+    <!-- Add this before your chart.js script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+    
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .header {
+            padding: 10px 20px;
+            background-color: white;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .dashboard-container {
+            flex: 1;
+            min-height: 0;
+            padding: 0 20px;
+        }
+        .grid-stack-item-content {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .chart-wrapper {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            height: calc(100% - 30px);
+        }
+        canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        #dataDisplay {
+            font-family: monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            height: calc(100% - 40px);
+        }
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .control-panel button {
+            background-color: #2196F3;
+        }
+        .control-panel button:hover {
+            background-color: #1976D2;
+        }
+        h2 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 1.2em;
+            flex-shrink: 0;
+            height: 20px;
+        }
+        .port-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .grid-stack {
+            background: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="port-controls">
+            <select id="portList">
+                <option value="">Select Port</option>
+            </select>
+            <button onclick="connectToPort()">Connect</button>
+        </div>
+        
+        <div class="control-panel">
+            <button onclick="sendCommand('heaterOn')">Turn On Heater</button>
+            <button onclick="sendCommand('heaterOff')">Turn Off Heater</button>
+            <button onclick="sendCommand('startLogging')">Start Logging</button>
+            <button onclick="sendCommand('stopLogging')">Stop Logging</button>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="grid-stack">
+            <!-- PV Diagram Widget -->
+            <div class="grid-stack-item" gs-x="0" gs-y="0" gs-w="4" gs-h="4">
+                <div class="grid-stack-item-content" data-chart="pv">
+                    <div class="chart-header">
+                        <h2>PV Diagram</h2>
+                        <div class="chart-controls">
+                            <button class="chart-btn pause-btn" onclick="togglePause('pv')">Pause</button>
+                            <button class="chart-btn" onclick="resetZoom('pv')">Reset</button>
+                            <button class="chart-btn" onclick="clearData('pv')">Clear</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="pvChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pressure vs Time Widget -->
+            <div class="grid-stack-item" gs-x="4" gs-y="0" gs-w="4" gs-h="4">
+                <div class="grid-stack-item-content" data-chart="pressure">
+                    <div class="chart-header">
+                        <h2>Pressure vs Time</h2>
+                        <div class="chart-controls">
+                            <button class="chart-btn pause-btn" onclick="togglePause('pressure')">Pause</button>
+                            <button class="chart-btn" onclick="resetZoom('pressure')">Reset</button>
+                            <button class="chart-btn" onclick="clearData('pressure')">Clear</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="pressureChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Volume vs Time Widget -->
+            <div class="grid-stack-item" gs-x="8" gs-y="0" gs-w="4" gs-h="4">
+                <div class="grid-stack-item-content" data-chart="volume">
+                    <div class="chart-header">
+                        <h2>Volume vs Time</h2>
+                        <div class="chart-controls">
+                            <button class="chart-btn pause-btn" onclick="togglePause('volume')">Pause</button>
+                            <button class="chart-btn" onclick="resetZoom('volume')">Reset</button>
+                            <button class="chart-btn" onclick="clearData('volume')">Clear</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="volumeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Serial Communication Log Widget -->
+            <div class="grid-stack-item" gs-x="0" gs-y="4" gs-w="12" gs-h="2">
+                <div class="grid-stack-item-content">
+                    <h2>Serial Communication Log</h2>
+                    <div id="dataDisplay"></div>
+                </div>
+            </div>
+
+            <!-- Data Settings Widget -->
+            <div class="grid-stack-item" gs-x="0" gs-y="6" gs-w="12" gs-h="2">
+                <div class="grid-stack-item-content">
+                    <div class="chart-header">
+                        <h2>Data Settings</h2>
+                        <div class="chart-controls">
+                            <button class="chart-btn" onclick="saveSettings()">Save Settings</button>
+                            <button class="chart-btn" onclick="resetDefaultSettings()">Reset Defaults</button>
+                        </div>
+                    </div>
+                    <div class="settings-panel">
+                        <div class="settings-group">
+                            <h3>Data Points</h3>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="maxLogEntries">Max Log Entries:</label>
+                                    <span class="tooltip">Maximum number of log entries to keep in history</span>
+                                </div>
+                                <input type="number" id="maxLogEntries">
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="maxDataPoints">Max Data Points:</label>
+                                    <span class="tooltip">Maximum number of points to show in PV diagram</span>
+                                </div>
+                                <input type="number" id="maxDataPoints">
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="maxTimePoints">Max Time Points:</label>
+                                    <span class="tooltip">Maximum number of points in time-based charts</span>
+                                </div>
+                                <input type="number" id="maxTimePoints">
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="sampleCount">Samples per Packet (1-10):</label>
+                                    <span class="tooltip">Number of samples to process from each packet</span>
+                                </div>
+                                <input type="number" id="sampleCount" min="1" max="10" value="1">
+                            </div>
+                        </div>
+                        <div class="settings-group">
+                            <h3>Data Filtering</h3>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="pressureMin">Pressure Min:</label>
+                                    <span class="tooltip">Minimum pressure value to display</span>
+                                </div>
+                                <input type="number" id="pressureMin">
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="pressureMax">Pressure Max:</label>
+                                    <span class="tooltip">Maximum pressure value to display</span>
+                                </div>
+                                <input type="number" id="pressureMax">
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="volumeMin">Volume Min:</label>
+                                    <span class="tooltip">Minimum volume value to display</span>
+                                </div>
+                                <input type="number" id="volumeMin">
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-label">
+                                    <label for="volumeMax">Volume Max:</label>
+                                    <span class="tooltip">Maximum volume value to display</span>
+                                </div>
+                                <input type="number" id="volumeMax">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html> 
