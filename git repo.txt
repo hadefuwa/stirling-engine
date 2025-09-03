@@ -1,0 +1,4 @@
+git add -A
+git commit -m "Prepare for Rev 0.1 release"
+git tag -a rev0.1 -m "Rev 0.1 released"
+git push origin main --tags
